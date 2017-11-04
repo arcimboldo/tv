@@ -80,7 +80,7 @@ func listShows(n int) []eztv.RSSShow {
 }
 
 func getPathFromShow(fname, basepath string) string {
-	re := regexp.MustCompile("(.*)S([0-9]*)E([0-9]*).*")
+	re := regexp.MustCompile("(.*)[sS]([0-9]*)[Eex]([0-9]*).*")
 	m := re.FindStringSubmatch(fname)
 	if m == nil {
 		return filepath.Join(basepath, "incoming")

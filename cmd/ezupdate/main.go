@@ -293,7 +293,7 @@ func main() {
 	// Show show or update show
 	if *flagShow != "" {
 		// is in the config?
-		show, _, err := getShow(*flagShow, cfg)
+		show, local, err := getShow(*flagShow, cfg)
 		if err != nil {
 			log.Fatalf("Error while getting show %q: %v", *flagShow, err)
 		}
@@ -320,10 +320,6 @@ func main() {
 			}
 		}
 		if *flagUpdate {
-			show, local, err := getShow(*flagShow, cfg)
-			if err != nil {
-				log.Fatalf("Error while getting show %q: %v", *flagShow, err)
-			}
 			if !local {
 				cfg.Shows = append(cfg.Shows, ShowCfg{Title: show.Title, URL: show.URL})
 			}

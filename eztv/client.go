@@ -85,14 +85,44 @@ URL:    %s
 Rating: %s`, s.Title, s.URL, s.Rating)
 }
 
-func (s Show) LatestEpisode() Episode {
+func (s *Show) LatestEpisode() Episode {
 	latest := Episode{}
 	for _, e := range s.Episodes {
-		if e.Downloaded && e.Season >= latest.Season && e.Episode >= latest.Episode {
+		if e.Downloaded && (e.Season > latest.Season || (e.Season >= latest.Season && e.Episode >= latest.Episode)) {
 			latest = *e
 		}
 	}
 	return latest
+}
+
+// fuzzyPathMatching matches two paths that *looks* the same
+func fuzzyPathMatching(p1, p2 string) bool {
+	p1, p2 = strings.ToLower(p1), strings.ToLower(p2)
+	if p1 == p2 {
+		return true
+	}
+	e1 := filepath.Ext(p1)
+	e2 := filepath.Ext(p2)
+	if e1 != e2 {
+		// two different types of movie cannot match
+		return false
+	}
+	// Sometimes they have '[eztv]' suffix
+
+	b1 := p1[:len(p1)-len(e1)]
+	b2 := p2[:len(p2)-len(e2)]
+	if strings.HasSuffix(b1, "[eztv]") {
+		if fuzzyPathMatching(b1[:len(b1)-6], b2) {
+			return true
+		}
+	}
+	if strings.HasSuffix(b2, "[eztv]") {
+		if fuzzyPathMatching(b1, b2[:len(b2)-6]) {
+			return true
+		}
+	}
+	return false
+
 }
 
 func (show *Show) GetDownloadedEpisodes(basedir string) map[int]map[int]string {
@@ -107,15 +137,9 @@ func (show *Show) GetDownloadedEpisodes(basedir string) map[int]map[int]string {
 				be := filepath.Base(e.FullPath(basedir))
 				bf := filepath.Base(path)
 
-				if be == bf {
+				if fuzzyPathMatching(be, bf) {
 					e.Downloaded = true
 					e.Path = path
-				} else {
-					// maybe it contains '[eztv].mkv'
-					if strings.TrimSuffix(be, "[eztv].mkv") == strings.TrimSuffix(bf, ".mkv") {
-						e.Downloaded = true
-						e.Path = path
-					}
 				}
 			}
 		}
@@ -148,7 +172,7 @@ func (show *Show) getExistingEpisodes(basedir string) (map[int]map[int]string, e
 		if info.IsDir() {
 			return nil
 		}
-		re := regexp.MustCompile("(.*)[sS]([0-9]*)[eEx]([0-9]*).*")
+		re := regexp.MustCompile("(?i)(.*)[S]([0-9]*)[Ex]([0-9]*).*\\.(mkv|avi|mp4|asf|mov|flv|swf|qt|vob|ogg|ogv|yuv|mpg|mpg2|mpeg|mpv|m4v)")
 		if m := re.FindStringSubmatch(filepath.Base(path)); m != nil {
 			s, _ := strconv.Atoi(m[2])
 			e, _ := strconv.Atoi(m[3])
@@ -293,7 +317,7 @@ func ListShows() ([]Show, error) {
 }
 
 func parseTitle(s string) (title string, season, episode int) {
-	re := regexp.MustCompile("(.*[^\\s]*)\\s*S?([0-9]+)[Ex]([0-9]+).*")
+	re := regexp.MustCompile("(.*[^\\s]*)\\s*[Ss]([0-9]+)[eEx]([0-9]+).*")
 	m := re.FindStringSubmatch(s)
 	if m == nil {
 		return s, -1, -1
