@@ -346,5 +346,10 @@ func GetShow(URL string) (Show, error) {
 		show.Episodes = append(show.Episodes, &ep)
 	})
 
+	// Sort episodes in reverse order
+	for i, j := 0, len(show.Episodes)-1; i < j; i, j = i+1, j-1 {
+		show.Episodes[i], show.Episodes[j] = show.Episodes[j], show.Episodes[i]
+	}
+
 	return show, nil
 }
