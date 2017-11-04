@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -86,11 +87,34 @@ func ConfigFromFile(fname string) (Config, error) {
 	return cfg, err
 }
 
+type SortableShows []ShowCfg
+
+func (s SortableShows) Len() int           { return len(s) }
+func (s SortableShows) Less(i, j int) bool { return s[i].Title < s[j].Title }
+func (s SortableShows) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 func SaveConfig(cfg Config, fname string) error {
 	if *dryRun {
-		log.Printf("SaveConfig: not writing file because --dry-run was used")
+		log.Println("SaveConfig: not writing file because --dry-run was used")
 		return nil
 	}
+	// Ensure we don't have duplicates - it's stupid but it happens
+	urls := make(map[string]ShowCfg)
+
+	for _, s := range cfg.Shows {
+		if _, ok := urls[s.URL]; !ok {
+			urls[s.URL] = s
+		} else {
+			log.Printf("Warning: duplicate entry %s", s.URL)
+		}
+	}
+	cfg.Shows = []ShowCfg{}
+	for _, s := range urls {
+		cfg.Shows = append(cfg.Shows, s)
+	}
+
+	sort.Sort(SortableShows(cfg.Shows))
+
 	mode := os.FileMode(0644)
 	fi, err := os.Stat(fname)
 	if err == nil {
