@@ -256,7 +256,6 @@ func GetShow(URL string) (Show, error) {
 			Size:       size,
 			Release:    release,
 		}
-
 		show.Episodes = append(show.Episodes, ep)
 	})
 
