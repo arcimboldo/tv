@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/arcimboldo/tv/eztv"
@@ -177,83 +176,29 @@ func getShow(s string, cfg Config) (eztv.Show, bool, error) {
 
 }
 
-func getExistingEpisodes(show eztv.Show, basedir string) (map[int]map[int]string, error) {
-	files, err := ioutil.ReadDir(basedir)
-	var possibleMatches []string
-	episodes := make(map[int]map[int]string)
-	r := regexp.MustCompile(strings.Replace(show.Title, " ", ".", -1))
-	for _, f := range files {
-		if f.IsDir() && r.MatchString(f.Name()) {
-			possibleMatches = append(possibleMatches, f.Name())
-		}
-	}
-	if len(possibleMatches) > 1 {
-		return episodes, fmt.Errorf("too many directories matching show title %q (%d)", show.Title, len(possibleMatches))
-	}
-
-	if len(possibleMatches) == 0 {
-		return episodes, nil
-	}
-
-	walkFn := func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-		re := regexp.MustCompile("(.*)[sS]([0-9]*)[eEx]([0-9]*).*")
-		if m := re.FindStringSubmatch(filepath.Base(path)); m != nil {
-			s, _ := strconv.Atoi(m[2])
-			e, _ := strconv.Atoi(m[3])
-			if _, ok := episodes[s]; !ok {
-				episodes[s] = make(map[int]string)
-			}
-			episodes[s][e] = path
-		}
-		return nil
-	}
-
-	err = filepath.Walk(filepath.Join(basedir, possibleMatches[0]), walkFn)
-	return episodes, err
-}
-
 func updateShow(show eztv.Show, cfg Config, all bool) error {
 	t, err := transmission.NewClient(cfg.Transmission.URL, cfg.Transmission.User, cfg.Transmission.Password)
 	if err != nil {
 		return err
 	}
-	downloaded, err := getExistingEpisodes(show, cfg.Data.DefaultPath)
+	downloaded := show.GetDownloadedEpisodes(cfg.Data.DefaultPath)
 	if err != nil {
 		return fmt.Errorf("unable to get list of existing episodes: %v", err)
 	}
 
-	maxSeason, maxEpisode := 0, 0
-	for s, _ := range downloaded {
-		if s <= maxSeason {
-			continue
-		}
-		maxSeason = s
-		maxEpisode = 0
-		for e, _ := range downloaded[s] {
-			if e > maxEpisode {
-				maxEpisode = e
-			}
-		}
-	}
+	latest := show.LatestEpisode()
 
 	toAdd := make(map[int]map[int][]eztv.Episode)
 
 	for _, e := range show.Episodes {
+		if e.Downloaded {
+			continue
+		}
+		if !all && !(e.Season >= latest.Season && e.Episode >= latest.Episode) {
+			continue
+		}
 		if _, ok := downloaded[e.Season]; ok {
 			if _, ok := downloaded[e.Season][e.Episode]; ok {
-				continue
-			}
-		}
-		if !all {
-			if e.Season < maxSeason {
-				continue
-			} else if e.Season == maxSeason && e.Episode < maxEpisode {
 				continue
 			}
 		}
@@ -261,7 +206,7 @@ func updateShow(show eztv.Show, cfg Config, all bool) error {
 		if _, ok := toAdd[e.Season]; !ok {
 			toAdd[e.Season] = make(map[int][]eztv.Episode)
 		}
-		toAdd[e.Season][e.Episode] = append(toAdd[e.Season][e.Episode], e)
+		toAdd[e.Season][e.Episode] = append(toAdd[e.Season][e.Episode], *e)
 	}
 
 	for s := range toAdd {
@@ -332,12 +277,16 @@ func main() {
 			fmt.Println(show)
 		}
 
-		downloaded, err := getExistingEpisodes(show, cfg.Data.DefaultPath)
+		downloaded := show.GetDownloadedEpisodes(cfg.Data.DefaultPath)
 		for _, e := range show.Episodes {
 			if _, ok := downloaded[e.Season]; ok {
 				if _, ok := downloaded[e.Season][e.Episode]; ok {
 					if !*flagQuiet {
-						fmt.Printf("d %s\n", e)
+						if e.Downloaded {
+							fmt.Printf("d %s - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
+						} else {
+							fmt.Printf("+ %s\n", e)
+						}
 					}
 					continue
 				}

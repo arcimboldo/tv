@@ -3,9 +3,11 @@ package eztv
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -51,6 +53,8 @@ type Episode struct {
 	ShowURL    string
 	Size       string
 	Release    string
+	Downloaded bool
+	Path       string
 }
 
 func (e Episode) String() string {
@@ -63,11 +67,15 @@ func (e Episode) Filename() string {
 	return base[:len(base)-len(ext)]
 }
 
+func (e Episode) FullPath(basedir string) string {
+	return filepath.Join(basedir, e.ShowTitle, fmt.Sprintf("S%02d", e.Season), e.Filename())
+}
+
 type Show struct {
 	Title    string
 	URL      string
 	Rating   string
-	Episodes []Episode
+	Episodes []*Episode
 }
 
 func (s Show) String() string {
@@ -75,6 +83,85 @@ func (s Show) String() string {
 Title:  %s
 URL:    %s
 Rating: %s`, s.Title, s.URL, s.Rating)
+}
+
+func (s Show) LatestEpisode() Episode {
+	latest := Episode{}
+	for _, e := range s.Episodes {
+		if e.Season >= latest.Season && e.Episode >= latest.Episode {
+			latest = *e
+		}
+	}
+	return latest
+}
+
+func (show *Show) GetDownloadedEpisodes(basedir string) map[int]map[int]string {
+	downloaded, err := show.getExistingEpisodes(basedir)
+	if err != nil {
+		return downloaded
+	}
+	for _, e := range show.Episodes {
+		if _, ok := downloaded[e.Season]; ok {
+			if path, ok := downloaded[e.Season][e.Episode]; ok {
+				// check if this file matches the path
+				be := filepath.Base(e.FullPath(basedir))
+				bf := filepath.Base(path)
+
+				if be == bf {
+					e.Downloaded = true
+					e.Path = path
+				} else {
+					// maybe it contains '[eztv].mkv'
+					if strings.TrimSuffix(be, "[eztv].mkv") == strings.TrimSuffix(bf, ".mkv") {
+						e.Downloaded = true
+						e.Path = path
+					}
+				}
+			}
+		}
+	}
+	return downloaded
+}
+
+func (show *Show) getExistingEpisodes(basedir string) (map[int]map[int]string, error) {
+	files, err := ioutil.ReadDir(basedir)
+	var possibleMatches []string
+	episodes := make(map[int]map[int]string)
+	r := regexp.MustCompile(strings.Replace(show.Title, " ", ".", -1))
+	for _, f := range files {
+		if f.IsDir() && r.MatchString(f.Name()) {
+			possibleMatches = append(possibleMatches, f.Name())
+		}
+	}
+	if len(possibleMatches) > 1 {
+		return episodes, fmt.Errorf("too many directories matching show title %q (%d)", show.Title, len(possibleMatches))
+	}
+
+	if len(possibleMatches) == 0 {
+		return episodes, nil
+	}
+
+	walkFn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		re := regexp.MustCompile("(.*)[sS]([0-9]*)[eEx]([0-9]*).*")
+		if m := re.FindStringSubmatch(filepath.Base(path)); m != nil {
+			s, _ := strconv.Atoi(m[2])
+			e, _ := strconv.Atoi(m[3])
+			if _, ok := episodes[s]; !ok {
+				episodes[s] = make(map[int]string)
+			}
+			episodes[s][e] = path
+		}
+		return nil
+	}
+
+	err = filepath.Walk(filepath.Join(basedir, possibleMatches[0]), walkFn)
+	return episodes, err
 }
 
 type RSSShow struct {
@@ -256,7 +343,7 @@ func GetShow(URL string) (Show, error) {
 			Size:       size,
 			Release:    release,
 		}
-		show.Episodes = append(show.Episodes, ep)
+		show.Episodes = append(show.Episodes, &ep)
 	})
 
 	return show, nil
