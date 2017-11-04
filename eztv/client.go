@@ -88,7 +88,7 @@ Rating: %s`, s.Title, s.URL, s.Rating)
 func (s Show) LatestEpisode() Episode {
 	latest := Episode{}
 	for _, e := range s.Episodes {
-		if e.Season >= latest.Season && e.Episode >= latest.Episode {
+		if e.Downloaded && e.Season >= latest.Season && e.Episode >= latest.Episode {
 			latest = *e
 		}
 	}

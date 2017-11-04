@@ -82,19 +82,15 @@ func ConfigFromFile(fname string) (Config, error) {
 
 	data, err := ioutil.ReadFile(fname)
 	if err != nil {
-		return cfg, fmt.Errorf("error while reading file %q: %v", fname, err)
+		if !os.IsNotExist(err) {
+			return cfg, fmt.Errorf("error while reading file %q: %v", fname, err)
+		}
 	}
 
 	err = yaml.Unmarshal(data, &cfg)
 
 	return cfg, err
 }
-
-type SortableShows []ShowCfg
-
-func (s SortableShows) Len() int           { return len(s) }
-func (s SortableShows) Less(i, j int) bool { return s[i].Title < s[j].Title }
-func (s SortableShows) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func SaveConfig(cfg Config, fname string) error {
 	if *dryRun {
@@ -116,7 +112,7 @@ func SaveConfig(cfg Config, fname string) error {
 		cfg.Shows = append(cfg.Shows, s)
 	}
 
-	sort.Sort(SortableShows(cfg.Shows))
+	sort.Slice(cfg.Shows, func(i, j int) bool { return cfg.Shows[i].Title < cfg.Shows[j].Title })
 
 	mode := os.FileMode(0644)
 	fi, err := os.Stat(fname)
@@ -181,7 +177,11 @@ func getShow(s string, cfg Config) (eztv.Show, bool, error) {
 }
 
 func updateShow(show eztv.Show, cfg Config, all bool) error {
-	t, err := transmission.NewClient(cfg.Transmission.URL, cfg.Transmission.User, cfg.Transmission.Password)
+	var t *transmission.Transmission
+	var err error
+	if !*dryRun {
+		t, err = transmission.NewClient(cfg.Transmission.URL, cfg.Transmission.User, cfg.Transmission.Password)
+	}
 	if err != nil {
 		return err
 	}
@@ -193,8 +193,8 @@ func updateShow(show eztv.Show, cfg Config, all bool) error {
 	latest := show.LatestEpisode()
 
 	toAdd := make(map[int]map[int][]eztv.Episode)
-
 	for _, e := range show.Episodes {
+
 		if e.Downloaded {
 			continue
 		}
@@ -210,6 +210,7 @@ func updateShow(show eztv.Show, cfg Config, all bool) error {
 		if _, ok := toAdd[e.Season]; !ok {
 			toAdd[e.Season] = make(map[int][]eztv.Episode)
 		}
+
 		toAdd[e.Season][e.Episode] = append(toAdd[e.Season][e.Episode], *e)
 	}
 
