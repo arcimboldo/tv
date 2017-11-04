@@ -19,13 +19,17 @@ import (
 )
 
 var (
-	flagF      = flag.String("f", "~/.eztvupdate.yaml", "Configuration file")
-	flagUpdate = flag.Bool("update", false, "Update show - need URL")
+	// commands
+	flagUpdateAll = flag.Bool("update-all", false, "Update all known shows")
+	flagList      = flag.String("list", "", "List shows. Can be \"local\" or \"all\"")
+	flagShow      = flag.String("show", "", "Show show 'show'")
+	// options for -show
+	flagUpdate = flag.Bool("update", false, "Update show - requires -show")
 	flagAll    = flag.Bool("all", false, "Update all episodes, not just the newest ones")
-	flagList   = flag.String("list", "", "List shows. Can be \"local\" or \"all\"")
-	flagShow   = flag.String("show", "", "Show show 'show'")
-	flagQuiet  = flag.Bool("q", false, "quieter output")
-	dryRun     = flag.Bool("dry-run", false, "Do not actually update")
+	// generic options
+	flagQuiet = flag.Bool("q", false, "quieter output")
+	flagF     = flag.String("f", "~/.eztvupdate.yaml", "Configuration file")
+	dryRun    = flag.Bool("dry-run", false, "Do not actually update")
 )
 
 type Config struct {
@@ -246,6 +250,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error while parsing configuration file %q: %v", *flagF, err)
 	}
+
+	// Check mutually exclusive options
+	cmds := 0
+	if *flagList != "" {
+		cmds++
+	}
+	if *flagShow != "" {
+		cmds++
+	}
+	if *flagUpdateAll {
+		cmds++
+	}
+	if cmds != 1 {
+		log.Fatalf("Exactly one of -update-all, -list -show options must be given")
+	}
+
 	if *flagList != "" {
 		if *flagList == "local" || *flagList == "all" {
 			if len(cfg.Shows) == 0 {
@@ -267,7 +287,10 @@ func main() {
 		} else {
 			log.Fatalf("Invalid value for option -list: %q. Must be either \"local\" or \"all\"", *flagList)
 		}
-	} else if *flagShow != "" {
+	}
+
+	// Show show or update show
+	if *flagShow != "" {
 		// is in the config?
 		show, _, err := getShow(*flagShow, cfg)
 		if err != nil {
@@ -308,6 +331,19 @@ func main() {
 			err = updateShow(show, cfg, *flagAll)
 			if err != nil {
 				log.Fatalf("Error while updating show %s: %v", show.Title, err)
+			}
+		}
+	}
+
+	if *flagUpdateAll {
+		for _, s := range cfg.Shows {
+			if !*flagQuiet {
+				log.Printf("getting show %s (%s)", s.Title, s.URL)
+			}
+			show, _, err := getShow(s.URL, cfg)
+			err = updateShow(show, cfg, *flagAll)
+			if err != nil {
+				log.Printf("Error while updating show %s: %v", show.Title, err)
 			}
 		}
 	}
