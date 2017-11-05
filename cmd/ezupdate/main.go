@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/arcimboldo/tv/eztv"
 	"github.com/arcimboldo/tv/transmission"
@@ -30,13 +29,15 @@ var (
 	flagLong   = flag.Bool("l", false, "Long listing")
 	// generic options
 	flagQuiet = flag.Bool("q", false, "quieter output")
-	flagF     = flag.String("f", "~/.eztvupdate.yaml", "Configuration file")
+	flagF     = flag.String("f", expandUser("~/.ezupdate.yaml"), "Configuration file")
 	dryRun    = flag.Bool("dry-run", false, "Do not actually update")
 )
 
 type Config struct {
-	Transmission TrCfg     `yaml:"transmission"`
-	Data         DataCfg   `yaml:"data"`
+	Transmission TrCfg    `yaml:"transmission"`
+	Data         DataCfg  `yaml:"data"`
+	Quality      []string `yaml:"quality"`
+	qualityRE    []*regexp.Regexp
 	Shows        []ShowCfg `yaml:"shows"`
 }
 
@@ -76,6 +77,7 @@ func defaultConfig() Config {
 	return Config{
 		Transmission: TrCfg{URL: "http://localhost:9091", User: "admin"},
 		Data:         DataCfg{DefaultPath: expandUser("~/eztv")},
+		Quality:      []string{"1080p", "720p", "HDTV"},
 	}
 }
 
@@ -88,8 +90,16 @@ func ConfigFromFile(fname string) (Config, error) {
 			return cfg, fmt.Errorf("error while reading file %q: %v", fname, err)
 		}
 	}
-
 	err = yaml.Unmarshal(data, &cfg)
+
+	// Build regexps
+	for _, q := range cfg.Quality {
+		r, err := regexp.Compile(q)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.qualityRE = append(cfg.qualityRE, r)
+	}
 
 	return cfg, err
 }
@@ -223,10 +233,13 @@ func updateShow(show eztv.Show, cfg Config, all bool) error {
 			for _, ep := range toAdd[s][e] {
 				if bestMatch.MagnetURL == "" {
 					bestMatch = ep
-				} else if strings.Contains(ep.Title, "1080p") {
-					bestMatch = ep
-				} else if strings.Contains(ep.Title, "720p") {
-					bestMatch = ep
+				} else {
+					for _, re := range cfg.qualityRE {
+						if re.MatchString(ep.Title) || re.MatchString(ep.TorrentURL) {
+							bestMatch = ep
+							break
+						}
+					}
 				}
 			}
 
@@ -254,6 +267,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error while parsing configuration file %q: %v", *flagF, err)
 	}
+	defer SaveConfig(cfg, fname)
 
 	// Check mutually exclusive options
 	cmds := 0
@@ -311,23 +325,22 @@ func main() {
 				if _, ok := downloaded[e.Season][e.Episode]; ok {
 					if !*flagQuiet {
 						if e.Downloaded {
-							fmt.Printf("d %s - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
+							fmt.Printf("d %q - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
 						} else {
-							fmt.Printf("+ %s - %s\n", e, e.TorrentURL)
+							fmt.Printf("+ %q - %s\n", e, e.TorrentURL)
 						}
 					}
 					continue
 				}
 			}
 			if !*flagQuiet {
-				fmt.Printf("  %s (%s) %s - %s\n", e.Title, e.Release, e.Size, e.TorrentURL)
+				fmt.Printf("  %q (%s) %s - %s\n", e.Title, e.Release, e.Size, e.TorrentURL)
 			}
 		}
 		if *flagUpdate {
 			if !local {
 				cfg.Shows = append(cfg.Shows, ShowCfg{Title: show.Title, URL: show.URL})
 			}
-			defer SaveConfig(cfg, fname)
 
 			err = updateShow(show, cfg, *flagAll)
 			if err != nil {
