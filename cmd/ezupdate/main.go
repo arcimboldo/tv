@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"sync"
 
 	"github.com/arcimboldo/tv/eztv"
 	"github.com/arcimboldo/tv/transmission"
@@ -382,20 +383,27 @@ func main() {
 	}
 
 	if *flagUpdateAll {
+		var wg sync.WaitGroup
+		wg.Add(len(cfg.Shows))
+
 		for _, s := range cfg.Shows {
-			if !*flagQuiet {
-				log.Printf("getting show %s (%s)", s.Title, s.URL)
-			}
-			shows, _, err := getShow(s.URL, cfg)
-			if err != nil {
-				log.Printf("error while getting show with url %s: %v", s.URL, err)
-				continue
-			}
-			show := shows[0]
-			err = updateShow(show, cfg, *flagAll)
-			if err != nil {
-				log.Printf("Error while updating show %s: %v", show.Title, err)
-			}
+			go func(s ShowCfg) {
+				defer wg.Done()
+				if !*flagQuiet {
+					log.Printf("getting show %s (%s)", s.Title, s.URL)
+				}
+				shows, _, err := getShow(s.URL, cfg)
+				if err != nil {
+					log.Printf("error while getting show with url %s: %v", s.URL, err)
+					return
+				}
+				show := shows[0]
+				err = updateShow(show, cfg, *flagAll)
+				if err != nil {
+					log.Printf("Error while updating show %s: %v", show.Title, err)
+				}
+			}(s)
 		}
+		wg.Wait()
 	}
 }
