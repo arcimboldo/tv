@@ -25,7 +25,9 @@ var (
 	flagShow      = flag.String("show", "", "Show show 'show'")
 	// options for -show
 	flagUpdate = flag.Bool("update", false, "Update show - requires -show")
+	flagAdd    = flag.String("add", "", "Add the show - requires URL")
 	flagAll    = flag.Bool("all", false, "Update all episodes, not just the newest ones")
+	flagLong   = flag.Bool("l", false, "Long listing")
 	// generic options
 	flagQuiet = flag.Bool("q", false, "quieter output")
 	flagF     = flag.String("f", "~/.eztvupdate.yaml", "Configuration file")
@@ -264,7 +266,7 @@ func main() {
 		cmds++
 	}
 	if cmds != 1 {
-		log.Fatalf("Exactly one of -update-all, -list -show options must be given")
+		log.Fatalf("Exactly one of -update-all, -list -show, add options must be given")
 	}
 
 	if *flagList != "" {
@@ -309,14 +311,14 @@ func main() {
 						if e.Downloaded {
 							fmt.Printf("d %s - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
 						} else {
-							fmt.Printf("+ %s\n", e)
+							fmt.Printf("+ %s - %s\n", e, e.TorrentURL)
 						}
 					}
 					continue
 				}
 			}
 			if !*flagQuiet {
-				fmt.Printf("  %s\n", e)
+				fmt.Printf("  %s - %s\n", e, e.TorrentURL)
 			}
 		}
 		if *flagUpdate {
@@ -328,6 +330,37 @@ func main() {
 			err = updateShow(show, cfg, *flagAll)
 			if err != nil {
 				log.Fatalf("Error while updating show %s: %v", show.Title, err)
+			}
+		}
+		if *flagAdd != "" {
+			show, _, err := getShow(*flagShow, cfg)
+			if err != nil {
+				log.Fatalf("Error while getting show %q: %v", *flagShow, err)
+			}
+			if !*flagQuiet {
+				fmt.Println(show)
+			}
+
+			var e *eztv.Episode
+			for _, ep := range show.Episodes {
+				if ep.TorrentURL == *flagAdd {
+					e = ep
+					break
+				}
+
+			}
+			if e == nil {
+				log.Fatalf("Torrent %s not found for show %s", *flagAdd, show)
+			}
+			if !*dryRun {
+				path := filepath.Join(cfg.Data.DefaultPath, show.Title, fmt.Sprintf("S%02d", e.Season))
+				t, err := transmission.NewClient(cfg.Transmission.URL, cfg.Transmission.User, cfg.Transmission.Password)
+				tinfo, err := t.AddTorrentTo(e.MagnetURL, path)
+				if err != nil {
+					fmt.Printf("ERROR: adding show %s: %v\n", e, err)
+				} else {
+					fmt.Printf("Added show %q S%02dE%02d - id %d, downloading in %q\n", e.ShowTitle, e.Season, e.Episode, tinfo.ID, path)
+				}
 			}
 		}
 	}
