@@ -42,7 +42,7 @@ func NewClient(URL, user, password string) (*Transmission, error) {
 	// Get the proper transmission id
 	t.sessionId = resp.Header.Get("X-Transmission-Session-Id")
 	if t.sessionId == "" {
-		return t, fmt.Errorf("Unable to get transmission ID. Resp status code %d (%v)", resp.StatusCode, resp.Status)
+		return t, fmt.Errorf("unable initialize Transmission client. Server replied %d (%v)", resp.StatusCode, resp.Status)
 	}
 	return t, nil
 }
@@ -81,6 +81,10 @@ func (t *Transmission) AddTorrent(magnet string) (TrInfo, error) {
 		return TrInfo{}, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return TrInfo{}, fmt.Errorf("got error %d (%s) while adding torrent.", resp.StatusCode, resp.Status)
+	}
 
 	jresp := struct {
 		Arguments struct {
