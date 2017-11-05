@@ -320,7 +320,7 @@ func main() {
 				}
 			}
 			if !*flagQuiet {
-				fmt.Printf("  %s - %s\n", e, e.TorrentURL)
+				fmt.Printf("  %s (%s) %s - %s\n", e.Title, e.Release, e.Size, e.TorrentURL)
 			}
 		}
 		if *flagUpdate {
@@ -346,14 +346,14 @@ func main() {
 
 			var e *eztv.Episode
 			for _, ep := range show.Episodes {
-				if ep.TorrentURL == *flagAdd {
+				if ep.TorrentURL == *flagAdd || ep.Title == *flagAdd {
 					e = ep
 					break
 				}
 
 			}
 			if e == nil {
-				log.Fatalf("Torrent %s not found for show %s", *flagAdd, show)
+				log.Fatalf("Torrent %s not found for show %s", *flagAdd, show.Title)
 			}
 			if !*dryRun {
 				path := filepath.Join(cfg.Data.DefaultPath, show.Title, fmt.Sprintf("S%02d", e.Season))
