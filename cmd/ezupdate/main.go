@@ -130,51 +130,52 @@ func SaveConfig(cfg Config, fname string) error {
 	return ioutil.WriteFile(fname, out, mode)
 }
 
-func getShow(s string, cfg Config) (eztv.Show, bool, error) {
+func getShow(s string, cfg Config) ([]eztv.Show, bool, error) {
 	// Search local show
-	found := 0
-	var match eztv.Show
+	found := []eztv.Show{}
 	for _, show := range cfg.Shows {
 		if *flagShow == show.Title || *flagShow == show.URL {
 			eztvShow, err := eztv.GetShow(show.URL)
 			if err != nil {
-				return eztvShow, false, err
+				return found, false, err
 			}
-			match = eztvShow
-			found += 1
+			found = append(found, eztvShow)
 		}
 	}
-	if found > 0 {
-		if found > 1 {
-			return match, true, fmt.Errorf("multiple matches for show %q (%d)", s, found)
+	if len(found) > 0 {
+		if len(found) > 1 {
+			return found, true, fmt.Errorf("multiple matches for show %q (%d)", s, len(found))
 		}
-		return match, true, nil
+		return found, true, nil
 	}
 
 	shows, err := eztv.ListShows()
 	if err != nil {
-		return eztv.Show{}, false, err
+		return found, false, err
 	}
 	r := regexp.MustCompile(fmt.Sprintf("(?i)%s", s))
 
-	found = 0
 	for _, show := range shows {
 		if s == show.Title || s == show.URL || r.MatchString(show.Title) {
-			match, err = eztv.GetShow(show.URL)
+			match, err := eztv.GetShow(show.URL)
 			if err != nil {
 				log.Printf("error while getting show %s: %v", show.URL, err)
 			}
-			found++
+			found = append(found, match)
 		}
 	}
-	if found > 0 {
-		if found > 1 {
-			return match, false, fmt.Errorf("multiple matches for show %q (%d)", s, found)
+	if len(found) > 0 {
+		if len(found) > 1 {
+			titles := []string{}
+			for _, f := range found {
+				titles = append(titles, f.Title)
+			}
+			return found, false, fmt.Errorf("multiple matches for show %q (%d): %q", s, len(titles), titles)
 		}
-		return match, false, nil
+		return found, false, nil
 	}
 
-	return eztv.Show{}, false, fmt.Errorf("no such show with title or url %q", s)
+	return []eztv.Show{}, false, fmt.Errorf("no such show with title or url %q", s)
 
 }
 
@@ -295,10 +296,11 @@ func main() {
 	// Show show or update show
 	if *flagShow != "" {
 		// is in the config?
-		show, local, err := getShow(*flagShow, cfg)
+		shows, local, err := getShow(*flagShow, cfg)
 		if err != nil {
 			log.Fatalf("Error while getting show %q: %v", *flagShow, err)
 		}
+		show := shows[0]
 		if !*flagQuiet {
 			fmt.Println(show)
 		}
@@ -333,10 +335,11 @@ func main() {
 			}
 		}
 		if *flagAdd != "" {
-			show, _, err := getShow(*flagShow, cfg)
+			shows, _, err := getShow(*flagShow, cfg)
 			if err != nil {
 				log.Fatalf("Error while getting show %q: %v", *flagShow, err)
 			}
+			show := shows[0]
 			if !*flagQuiet {
 				fmt.Println(show)
 			}
@@ -370,7 +373,12 @@ func main() {
 			if !*flagQuiet {
 				log.Printf("getting show %s (%s)", s.Title, s.URL)
 			}
-			show, _, err := getShow(s.URL, cfg)
+			shows, _, err := getShow(s.URL, cfg)
+			if err != nil {
+				log.Printf("error while getting show with url %s: %v", s.URL, err)
+				continue
+			}
+			show := shows[0]
 			err = updateShow(show, cfg, *flagAll)
 			if err != nil {
 				log.Printf("Error while updating show %s: %v", show.Title, err)

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +19,9 @@ import (
 )
 
 var (
-	eztvURL     string = "https://eztv.ag/api/get-torrents"
-	maxPageSize int    = 100
+	eztvURL            string = "https://eztv.ag/api/get-torrents"
+	maxPageSize        int    = 100
+	defaultMovieRegexp string = "(?i)(.*)\\s*S?([0-9]+)[Ex]([0-9]+).*\\.(mkv|avi|mp4|asf|mov|flv|swf|qt|vob|ogg|ogv|yuv|mpg|mpg2|mpeg|mpv|m4v)"
 )
 
 type UnixTime struct {
@@ -172,7 +174,7 @@ func (show *Show) getExistingEpisodes(basedir string) (map[int]map[int]string, e
 		if info.IsDir() {
 			return nil
 		}
-		re := regexp.MustCompile("(?i)(.*)[S]([0-9]*)[Ex]([0-9]*).*\\.(mkv|avi|mp4|asf|mov|flv|swf|qt|vob|ogg|ogv|yuv|mpg|mpg2|mpeg|mpv|m4v)")
+		re := regexp.MustCompile(defaultMovieRegexp)
 		if m := re.FindStringSubmatch(filepath.Base(path)); m != nil {
 			s, _ := strconv.Atoi(m[2])
 			e, _ := strconv.Atoi(m[3])
@@ -317,7 +319,7 @@ func ListShows() ([]Show, error) {
 }
 
 func parseTitle(s string) (title string, season, episode int) {
-	re := regexp.MustCompile("(.*[^\\s]*)\\s*[Ss]([0-9]+)[eEx]([0-9]+).*")
+	re := regexp.MustCompile("(?i)(.*[^\\s]*)\\s*S?([0-9]+)[Ex]([0-9]+).*")
 	m := re.FindStringSubmatch(s)
 	if m == nil {
 		return s, -1, -1
@@ -370,10 +372,13 @@ func GetShow(URL string) (Show, error) {
 		show.Episodes = append(show.Episodes, &ep)
 	})
 
-	// Sort episodes in reverse order
-	for i, j := 0, len(show.Episodes)-1; i < j; i, j = i+1, j-1 {
-		show.Episodes[i], show.Episodes[j] = show.Episodes[j], show.Episodes[i]
-	}
+	// Sort episodes
+	sort.Slice(show.Episodes, func(i, j int) bool {
+		return show.Episodes[i].Season < show.Episodes[j].Season || (show.Episodes[i].Season == show.Episodes[j].Season && show.Episodes[i].Episode < show.Episodes[j].Episode)
+	})
+	// for i, j := 0, len(show.Episodes)-1; i < j; i, j = i+1, j-1 {
+	// 	show.Episodes[i], show.Episodes[j] = show.Episodes[j], show.Episodes[i]
+	// }
 
 	return show, nil
 }
