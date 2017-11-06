@@ -1,10 +1,18 @@
 # ezupdate
 
-`ezupdate` is a simple tool to download (using [transmission](https://transmissionbt.com/)) and keep up to date torrent
-from eztv.ag
+**DISCLAIMER: This tool might download files that might not be legal
+in your country. Before running it blindly you should ensure that you
+can legally download torrents on your country. The author takes no
+responsibility on illecit usage of the software and condamn any
+action that goes against the law.**
 
-There is a TODO list of features I would like to add, feel free to
-issue a PR.
+`ezupdate` is a simple tool to download
+(using [transmission](https://transmissionbt.com/)) and keep up to
+date torrent from eztv.ag
+
+It was born as a real-world exercise to learn go and I am mainly working on making
+the code more robust and elegant. 
+
 
 ## Configuration
 

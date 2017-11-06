@@ -326,16 +326,16 @@ func main() {
 				if _, ok := downloaded[e.Season][e.Episode]; ok {
 					if !*flagQuiet {
 						if e.Downloaded {
-							fmt.Printf("d %q - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
+							fmt.Printf("d %s - %s\n", e, e.FullPath(cfg.Data.DefaultPath))
 						} else {
-							fmt.Printf("+ %q - %s\n", e, e.TorrentURL)
+							fmt.Printf("+ %s - %s\n", e, e.TorrentURL)
 						}
 					}
 					continue
 				}
 			}
 			if !*flagQuiet {
-				fmt.Printf("  %q (%s) %s - %s\n", e.Title, e.Release, e.Size, e.TorrentURL)
+				fmt.Printf("  %q - %s\n", e, e.TorrentURL)
 			}
 		}
 		if *flagUpdate {

@@ -60,7 +60,7 @@ type Episode struct {
 }
 
 func (e Episode) String() string {
-	return fmt.Sprintf("S%02d E%02d - %s - (%s) (%s)", e.Season, e.Episode, e.Title, e.Size, e.Release)
+	return fmt.Sprintf("S%02d E%02d - %q - (%s) (%s)", e.Season, e.Episode, e.Title, e.Size, e.Release)
 }
 
 func (e Episode) Filename() string {
