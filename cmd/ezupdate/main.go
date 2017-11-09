@@ -335,7 +335,7 @@ func main() {
 				}
 			}
 			if !*flagQuiet {
-				fmt.Printf("  %q - %s\n", e, e.TorrentURL)
+				fmt.Printf("  %s - %s\n", e, e.TorrentURL)
 			}
 		}
 		if *flagUpdate {
